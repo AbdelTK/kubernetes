@@ -1,0 +1,55 @@
+# General
+.DS_Store
+**/.DS_Store
+**/.terraform.lock.hcl
+.AppleDouble
+.LSOverride
+**/manifest.json
+.vscode
+**/..vscode
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails
+._*
+
+# Files and directories that might appear in the root of a volume or on AFP share
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Terraform-specific exclusions
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files and backup files
+*.tfstate
+*.tfstate.*
+
+# Exclude all .tfvars files, which may contain sensitive data
+*.tfvars
+*.tfvars.json
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Ignore override files used for local resource customization
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc

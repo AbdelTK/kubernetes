@@ -1,42 +1,81 @@
 #!/bin/bash
 #
-# Setup for Control Plane (Master) servers
 
-set -euxo pipefail
+# Login to to master node and set hostname using hostnamectl command
 
-# If you need public access to API server using the servers Public IP adress, change PUBLIC_IP_ACCESS to true.
+sudo hostnamectl set-hostname "k8smaster.example.net"
+exec bash
 
-PUBLIC_IP_ACCESS="true"
-NODENAME=$(hostname -s)
-POD_CIDR="192.168.0.0/16"
+#Swapoff and sed command to disable swap
 
-# Pull required images
+sudo swapoff -a
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
-sudo kubeadm config images pull --cri-socket=/var/run/crio/crio.sock
+# Following kernel modules on all the nodes
 
-# Initialize kubeadm based on PUBLIC_IP_ACCESS
+sudo tee /etc/modules-load.d/containerd.conf <<EOF
+overlay
+br_netfilter
+EOF
+sudo modprobe overlay
+sudo modprobe br_netfilter
 
-if [[ "$PUBLIC_IP_ACCESS" == "false" ]]; then
-    
-    MASTER_PRIVATE_IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
-    sudo kubeadm init --cri-socket=/var/run/crio/crio.sock --apiserver-advertise-address="$MASTER_PRIVATE_IP" --apiserver-cert-extra-sans="$MASTER_PRIVATE_IP" --pod-network-cidr="$POD_CIDR" --node-name "$NODENAME" --ignore-preflight-errors Swap
+# Set the following Kernel parameters for Kubernetes
 
-elif [[ "$PUBLIC_IP_ACCESS" == "true" ]]; then
+sudo tee /etc/sysctl.d/kubernetes.conf <<EOT
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOT
 
-    MASTER_PUBLIC_IP=$(curl ifconfig.me && echo "")
-    sudo kubeadm init --cri-socket=/var/run/crio/crio.sock --control-plane-endpoint="$MASTER_PUBLIC_IP" --apiserver-cert-extra-sans="$MASTER_PUBLIC_IP" --pod-network-cidr="$POD_CIDR" --node-name "$NODENAME" --ignore-preflight-errors Swap
+# Reload the above changes
 
-else
-    echo "Error: MASTER_PUBLIC_IP has an invalid value: $PUBLIC_IP_ACCESS"
-    exit 1
-fi
+sudo sysctl --system
 
-# Configure kubeconfig
+# To install containerd, first install its dependencies.
 
-mkdir -p "$HOME"/.kube
-sudo cp -i /etc/kubernetes/admin.conf "$HOME"/.kube/config
-sudo chown "$(id -u)":"$(id -g)" "$HOME"/.kube/config
+sudo apt install -y curl gnupg2 software-properties-common apt-transport-https ca-certificates
 
-# Install Claico Network Plugin Network 
+# Enable docker repository
 
-kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmour -o /etc/apt/trusted.gpg.d/docker.gpg
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+# apt command to install containerd
+
+sudo apt update
+sudo apt install -y containerd.io
+
+# Configure containerd so that it starts using systemd as cgroup.
+
+containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
+sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+
+# Restart and enable containerd service
+
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+
+# Add Kubernetes repository
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+# Install Kubectl, Kubeadm and Kubelet
+
+sudo apt update
+sudo apt install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+
+# Install Kubernetes Cluster
+sudo kubeadm init --control-plane-endpoint=k8smaster.example.net
+
+# Start interacting with cluster
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+
+

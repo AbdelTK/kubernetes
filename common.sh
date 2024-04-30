@@ -3,8 +3,8 @@
 
 # Login to to master node and set hostname using hostnamectl command
 
-sudo hostnamectl set-hostname "k8smaster.example.net"
-exec bash
+#sudo hostnamectl set-hostname "k8sworker1.example.net"
+#exec bash
 
 #Swapoff and sed command to disable swap
 
